@@ -16,8 +16,22 @@
   "content_scripts": [
     {
       "matches": ["https://www.youtube.com/*"],
-      "js": ["content/folderView.js", "content/content.js"],
-      "css": ["content/content.css", "content/folderView.css"],
+      "js": [
+        "content/core/utils.js",
+        "content/core/store.js",
+        "content/core/channel.js",
+        "content/wall/videos.js",
+        "content/wall/wall.js",
+        "content/sidebar/forms.js",
+        "content/sidebar/sidebar.js",
+        "content/watch/watch-button.js"
+      ],
+      "css": [
+        "content/core/shared.css",
+        "content/sidebar/sidebar.css",
+        "content/wall/folderView.css",
+        "content/watch/watch.css"
+      ],
       "run_at": "document_idle"
     }
   ]

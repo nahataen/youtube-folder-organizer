@@ -4,10 +4,11 @@ Chrome/Edge MV3 extension, no build step. Static files loaded unpacked. No npm, 
 
 ## Structure
 
-- `manifest.json` — MV3, `permissions: ["storage"]` only. Content scripts run on `https://www.youtube.com/*` at `document_idle`, JS order: `content/folderView.js` then `content/content.js`.
-- `content/content.js` — sidebar `MIS CARPETAS` (CRUD folders, channel detection) + botón `＋ Carpeta` dentro del `ytd-menu-renderer` del watch (alta de canales). Exposes nothing; calls `window.YTCFView?.openFolder(folder)`.
-- `content/folderView.js` — folder video wall. Exposes `window.YTCFView = { openFolder, close, getOpenId }`.
-- `content/*.css` — sidebar and wall styles, light/dark via `.ytcf-dark` class.
+- `manifest.json` — MV3, `permissions: ["storage"]` only. Content scripts run on `https://www.youtube.com/*` at `document_idle`. JS loads in manifest order (classic scripts, no bundler); all share `window.YTCF` namespace.
+- `content/core/` — `utils.js` (creates `YTCF` + toast/DOM/text/URL helpers), `store.js` (state `folders`/`currentChannel`, `ytFoldersV1` persistence), `channel.js` (channel detection), `shared.css` (buttons, avatar, toast, hints).
+- `content/sidebar/` — `sidebar.js` (`MIS CARPETAS` render + inject + SPA observers + init), `forms.js` (create/rename), `sidebar.css`.
+- `content/watch/` — `watch-button.js` (`＋ Carpeta` in watch `ytd-menu-renderer`, folder picker, add/remove membership), `watch.css` (self-contained styles).
+- `content/wall/` — `videos.js` (channel scraping + RSS fallback + cache), `wall.js` (video wall, exposes `window.YTCFView = { openFolder, close, getOpenId }`), `folderView.css`.
 - `icons/` — 16/48/128 px.
 
 ## Data

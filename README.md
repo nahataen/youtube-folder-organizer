@@ -7,7 +7,7 @@ Extensión para **Chrome y Edge** que añade una sección **MIS CARPETAS** al me
 ## ✨ Funciones
 
 * Crear, renombrar y eliminar carpetas.
-* Añadir canales desde cualquier canal o video.
+* Añadir o quitar canales con el botón ＋ Carpeta de cualquier video.
 * Ver los videos recientes de cada carpeta.
 * Videos agrupados por canal con miniatura, duración, vistas y fecha.
 * Soporte para modo claro y oscuro.
@@ -34,10 +34,10 @@ Extensión para **Chrome y Edge** que añade una sección **MIS CARPETAS** al me
 ```text
 manifest.json
 content/
-  content.js
-  content.css
-  folderView.js
-  folderView.css
+  core/       → utils.js, store.js, channel.js + shared.css
+  sidebar/    → sidebar.js, forms.js + sidebar.css
+  watch/      → watch-button.js + watch.css
+  wall/       → wall.js, videos.js + folderView.css
 icons/
 ```
 

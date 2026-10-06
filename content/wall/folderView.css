@@ -1,5 +1,5 @@
 /* Carpetas YouTube — estilos del muro de videos por carpeta.
- * Reutiliza clases base de content.css (.ytcf-btn, .ytcf-count, .ytcf-avatar, .ytcf-hint).
+ * Reutiliza clases base de core/shared.css (.ytcf-btn, .ytcf-count, .ytcf-avatar, .ytcf-hint).
  * Soporta modo claro (defecto) y oscuro (clase .ytcf-dark que pone el módulo). */
 
 #ytcf-wall.ytcf-wall {
