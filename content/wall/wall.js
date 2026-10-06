@@ -31,7 +31,7 @@ window.YTCF = window.YTCF || {};
   function buildHeader(wall, folder, onRefresh) {
     const head = el('div', 'ytcf-wall-head');
 
-    const back = el('button', 'ytcf-btn ytcf-btn-ghost', '← Volver');
+    const back = el('button', 'ytcf-chip', '← Volver');
     back.type = 'button';
     back.title = 'Volver al contenido de YouTube';
     back.addEventListener('click', close);
@@ -48,7 +48,7 @@ window.YTCF = window.YTCF || {};
       )
     );
 
-    const refresh = el('button', 'ytcf-btn ytcf-btn-ghost', '↻ Actualizar');
+    const refresh = el('button', 'ytcf-chip', '↻ Actualizar');
     refresh.type = 'button';
     refresh.title = 'Volver a cargar los videos';
     refresh.addEventListener('click', onRefresh);

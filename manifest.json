@@ -24,7 +24,8 @@
         "content/wall/wall.js",
         "content/sidebar/forms.js",
         "content/sidebar/sidebar.js",
-        "content/watch/watch-button.js"
+        "content/watch/watch-button.js",
+        "content/samemenu/samemenu.js"
       ],
       "css": [
         "content/core/shared.css",

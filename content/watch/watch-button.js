@@ -2,6 +2,8 @@
  * Vive dentro del ytd-menu-renderer de la página de reproducción (/watch),
  * no en el sidebar. Solo se muestra cuando se detecta el canal del video.
  * El selector lista TODAS las carpetas: clic añade o quita (✓ = ya la contiene).
+ * `ns.toggleChannelPicker(wrap)` es la entrada reutilizable: el módulo
+ * samemenu la usa para el mismo botón en la cabecera del canal.
  * Carga el último (ver manifest.json): al final se auto-sincroniza por si el
  * arranque del sidebar ya resolvió el storage antes de que existiera este módulo. */
 
@@ -11,6 +13,10 @@ window.YTCF = window.YTCF || {};
   'use strict';
 
   const WATCHBTN_ID = 'ytcf-watch-add';
+
+  // Ancla del selector abierto (botón del video o de la cabecera del canal).
+  // Lo usa el cierre por clic fuera y el re-anclaje en scroll/resize.
+  let pickerAnchor = null;
 
   // Solo el menú principal de acciones bajo el título (hay otros
   // ytd-menu-renderer en comentarios, descripción, etc. que se ignoran).
@@ -56,7 +62,7 @@ window.YTCF = window.YTCF || {};
       wrap.className = 'ytcf-watch-add';
       const btn = document.createElement('button');
       btn.type = 'button';
-      btn.className = 'ytcf-watch-btn';
+      btn.className = 'ytcf-chip';
       // stopPropagation: evita que el clic burbujee a los handlers de YouTube.
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -78,7 +84,12 @@ window.YTCF = window.YTCF || {};
   }
 
   function onWatchAddClick() {
-    const wrap = document.getElementById(WATCHBTN_ID);
+    toggleChannelPicker(document.getElementById(WATCHBTN_ID));
+  }
+
+  // Entrada genérica del botón "＋ Carpeta" (video o cabecera del canal):
+  // alterna el selector flotante anclado al `wrap` que lo abrió.
+  function toggleChannelPicker(wrap) {
     // Si el selector ya está abierto, el clic alterna (cerrar).
     if (document.querySelector('.ytcf-watch-picker')) {
       closeWatchPicker();
@@ -112,6 +123,7 @@ window.YTCF = window.YTCF || {};
 
   function closeWatchPicker() {
     document.querySelector('.ytcf-watch-picker')?.remove();
+    pickerAnchor = null;
     document.removeEventListener('click', onWatchPickerOutside, true);
     document.removeEventListener('keydown', onWatchPickerKey, true);
     window.removeEventListener('resize', repositionWatchPicker);
@@ -120,10 +132,9 @@ window.YTCF = window.YTCF || {};
 
   function onWatchPickerOutside(e) {
     const picker = document.querySelector('.ytcf-watch-picker');
-    const wrap = document.getElementById(WATCHBTN_ID);
     if (!picker) return;
     if (picker.contains(e.target)) return;
-    if (wrap && wrap.contains(e.target)) return;
+    if (pickerAnchor && pickerAnchor.contains(e.target)) return;
     closeWatchPicker();
   }
 
@@ -137,7 +148,7 @@ window.YTCF = window.YTCF || {};
   // fuera, botón Cancelar o guardado — nunca por scroll o resize.
   function repositionWatchPicker() {
     const picker = document.querySelector('.ytcf-watch-picker');
-    const wrap = document.getElementById(WATCHBTN_ID);
+    const wrap = pickerAnchor || document.getElementById(WATCHBTN_ID);
     if (!picker || !wrap) return;
     const rect = wrap.getBoundingClientRect();
     if (rect.width === 0 && rect.height === 0) return; // botón oculto temporalmente
@@ -152,6 +163,7 @@ window.YTCF = window.YTCF || {};
   // Cada carpeta indica si ya contiene el canal (✓): clic añade o quita.
   function showWatchPicker(wrap, channel, allFolders) {
     closeWatchPicker();
+    pickerAnchor = wrap;
     const picker = document.createElement('div');
     picker.className = 'ytcf-watch-picker';
     picker.setAttribute('role', 'listbox');
@@ -243,6 +255,7 @@ window.YTCF = window.YTCF || {};
   ns.ensureWatchButton = ensureWatchButton;
   ns.removeWatchButton = removeWatchButton;
   ns.closeWatchPicker = closeWatchPicker;
+  ns.toggleChannelPicker = toggleChannelPicker;
 
   // Auto-sincroniza al cargar: el sidebar pudo resolver el storage antes de
   // que este módulo existiera (los content-scripts comparten microtareas).
