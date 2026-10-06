@@ -1,6 +1,8 @@
 /* Carpetas YouTube — Organizador de Suscripciones (content script, mundo ISOLATED).
- * Inyecta una sección "MIS CARPETAS" en el sidebar (guía) de YouTube.
- * Sin popup: toda la gestión vive en el sidebar. Datos solo en chrome.storage.local.
+ * Inyecta una sección "MIS CARPETAS" en el sidebar (guía) de YouTube y un
+ * botón "＋ Carpeta" en el menú de acciones del video (ytd-menu-renderer).
+ * Sin popup: las carpetas viven en el sidebar, el alta de canales en el video.
+ * Datos solo en chrome.storage.local.
  * Sin innerHTML con datos de usuario: todo se crea con createElement + textContent. */
 
 (() => {
@@ -188,9 +190,7 @@
     const root = document.getElementById(SECTION_ID);
     if (!root) return;
     root.querySelector('.ytcf-body')?.remove();
-    root.querySelector('.ytcf-add-current')?.remove();
     root.appendChild(buildBody());
-    root.appendChild(buildAddCurrent());
     syncTheme();
   }
 
@@ -299,7 +299,7 @@
       if (folder.channels.length === 0) {
         const hint = document.createElement('p');
         hint.className = 'ytcf-hint';
-        hint.textContent = 'Carpeta vacía. Visita un canal o video y usa «Añadir canal actual».';
+        hint.textContent = 'Carpeta vacía. Abre un video del canal y usa «＋ Carpeta» en el menú de acciones.';
         list.appendChild(hint);
       }
 
@@ -476,80 +476,198 @@
     input.select();
   }
 
-  // Botón "Añadir canal actual" al pie de la sección
-  function buildAddCurrent() {
-    const box = document.createElement('div');
-    box.className = 'ytcf-add-current';
+  // ---------- Botón "＋ Carpeta" en el menú de acciones del video ----------
+  // Vive dentro del ytd-menu-renderer de la página de reproducción (/watch),
+  // no en el sidebar. Solo se muestra cuando se detecta el canal del video.
+  const WATCHBTN_ID = 'ytcf-watch-add';
 
-    const btn = document.createElement('button');
-    btn.className = 'ytcf-btn ytcf-btn-wide';
-    btn.type = 'button';
-
-    if (!currentChannel) {
-      btn.disabled = true;
-      btn.textContent = '＋ Añadir canal actual';
-      btn.title = 'Visita la página de un canal o un video para añadirlo a una carpeta.';
-      box.appendChild(btn);
-      return box;
-    }
-
-    btn.textContent = `＋ ${currentChannel.name.slice(0, 24)}`;
-    btn.title = `Añadir "${currentChannel.name}" a una carpeta`;
-    btn.addEventListener('click', () => {
-      if (folders.length === 0) {
-        toast('Crea primero una carpeta con el botón +.');
-        return;
-      }
-      // Si solo hay una carpeta, guardar directo; si hay varias, mostrar selector.
-      const targets = folders.filter((f) => !f.channels.some((c) => c.key === currentChannel.key));
-      if (targets.length === 0) {
-        toast('Ese canal ya está en todas tus carpetas.');
-        return;
-      }
-      if (folders.length === 1) {
-        addToFolder(folders[0].id);
-        return;
-      }
-      showPicker(box, btn, targets);
-    });
-    box.appendChild(btn);
-    return box;
+  // Solo el menú principal de acciones bajo el título (hay otros
+  // ytd-menu-renderer en comentarios, descripción, etc. que se ignoran).
+  function watchMenu() {
+    return (
+      document.querySelector('ytd-watch-metadata #actions ytd-menu-renderer') ||
+      document.querySelector('ytd-watch-metadata ytd-menu-renderer') ||
+      null
+    );
   }
 
-  function showPicker(box, anchorBtn, targets) {
-    box.querySelector('.ytcf-picker')?.remove();
+  function watchSlot(menu) {
+    return menu.querySelector('#top-level-buttons-computed') || menu;
+  }
+
+  function removeWatchButton() {
+    document.getElementById(WATCHBTN_ID)?.remove();
+    closeWatchPicker();
+  }
+
+  function ensureWatchButton() {
+    if (location.pathname !== '/watch') {
+      removeWatchButton();
+      return;
+    }
+    const channel = detectCurrentChannel();
+    currentChannel = channel;
+    if (!channel) {
+      removeWatchButton();
+      return;
+    }
+    const menu = watchMenu();
+    if (!menu) return; // acciones aún no renderizadas; el observer reintenta
+    const slot = watchSlot(menu);
+    let wrap = document.getElementById(WATCHBTN_ID);
+    if (wrap && wrap.parentNode !== slot) {
+      wrap.remove();
+      wrap = null;
+    }
+    if (!wrap) {
+      wrap = document.createElement('div');
+      wrap.id = WATCHBTN_ID;
+      wrap.className = 'ytcf-watch-add';
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'ytcf-watch-btn';
+      // stopPropagation: evita que el clic burbujee a los handlers de YouTube.
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        onWatchAddClick();
+      });
+      wrap.appendChild(btn);
+    }
+    // Siempre a la izquierda del Like (primer botón de la barra de acciones).
+    if (slot.firstElementChild !== wrap) slot.prepend(wrap);
+    const btn = wrap.querySelector('button');
+    btn.textContent = '＋ Carpeta';
+    btn.title = `Añadir "${channel.name}" a una carpeta`;
+    btn.setAttribute('aria-label', `Añadir el canal ${channel.name} a una carpeta`);
+    if (wrap.dataset.ckey !== channel.key) {
+      wrap.dataset.ckey = channel.key; // autoplay / SPA: cierra el selector obsoleto
+      closeWatchPicker();
+    }
+  }
+
+  function onWatchAddClick() {
+    const wrap = document.getElementById(WATCHBTN_ID);
+    // Si el selector ya está abierto, el clic alterna (cerrar).
+    if (document.querySelector('.ytcf-watch-picker')) {
+      closeWatchPicker();
+      return;
+    }
+    if (!wrap) return;
+    // Re-detecta en el momento del clic: no confía en el caché del observer,
+    // que puede quedar obsoleto durante los re-renders de YouTube.
+    const channel = detectCurrentChannel() || currentChannel;
+    if (!channel) {
+      toast('No se pudo detectar el canal de este video. Espera a que cargue la página.');
+      return;
+    }
+    currentChannel = channel;
+    if (folders.length === 0) {
+      toast('Crea primero una carpeta en «MIS CARPETAS» del menú lateral.');
+      return;
+    }
+    // Vía rápida: una sola carpeta y el canal aún no está en ella.
+    if (
+      folders.length === 1 &&
+      !folders[0].channels.some((c) => c.key === channel.key)
+    ) {
+      addToFolder(folders[0].id);
+      return;
+    }
+    // El selector lista TODAS las carpetas: permite añadir o quitar,
+    // para corregir un guardado por error sin ir al sidebar.
+    showWatchPicker(wrap, channel, folders);
+  }
+
+  function closeWatchPicker() {
+    document.querySelector('.ytcf-watch-picker')?.remove();
+    document.removeEventListener('click', onWatchPickerOutside, true);
+    document.removeEventListener('keydown', onWatchPickerKey, true);
+    window.removeEventListener('resize', repositionWatchPicker);
+    window.removeEventListener('scroll', repositionWatchPicker, true);
+  }
+
+  function onWatchPickerOutside(e) {
+    const picker = document.querySelector('.ytcf-watch-picker');
+    const wrap = document.getElementById(WATCHBTN_ID);
+    if (!picker) return;
+    if (picker.contains(e.target)) return;
+    if (wrap && wrap.contains(e.target)) return;
+    closeWatchPicker();
+  }
+
+  function onWatchPickerKey(e) {
+    if (e.key !== 'Escape') return;
+    e.stopPropagation();
+    closeWatchPicker();
+  }
+
+  // Re-ancla el selector bajo el botón: el menú solo se cierra con clic
+  // fuera, botón Cancelar o guardado — nunca por scroll o resize.
+  function repositionWatchPicker() {
+    const picker = document.querySelector('.ytcf-watch-picker');
+    const wrap = document.getElementById(WATCHBTN_ID);
+    if (!picker || !wrap) return;
+    const rect = wrap.getBoundingClientRect();
+    if (rect.width === 0 && rect.height === 0) return; // botón oculto temporalmente
+    const w = picker.offsetWidth;
+    const left = Math.min(Math.max(8, rect.right - w), window.innerWidth - w - 8);
+    picker.style.top = `${rect.bottom + 8}px`;
+    picker.style.left = `${Math.max(8, left)}px`;
+  }
+  // Selector flotante con posición fija sobre la página: no depende del
+  // layout interno de la barra de acciones (que puede recortar o mover hijos).
+  // Cada carpeta indica si ya contiene el canal (✓): clic añade o quita.
+  function showWatchPicker(wrap, channel, allFolders) {
+    closeWatchPicker();
     const picker = document.createElement('div');
-    picker.className = 'ytcf-picker';
+    picker.className = 'ytcf-watch-picker';
     picker.setAttribute('role', 'listbox');
     picker.setAttribute('aria-label', 'Elegir carpeta');
+    picker.style.position = 'fixed';
 
-    for (const f of targets) {
+    const head = document.createElement('div');
+    head.className = 'ytcf-watch-picker-title';
+    head.textContent = `Añadir o quitar «${channel.name}»:`;
+    head.title = channel.name;
+    picker.appendChild(head);
+
+    for (const f of allFolders) {
+      const member = f.channels.some((c) => c.key === channel.key);
       const item = document.createElement('button');
-      item.className = 'ytcf-picker-item';
+      item.className = 'ytcf-watch-picker-item' + (member ? ' ytcf-watch-picker-item-added' : '');
       item.type = 'button';
       item.setAttribute('role', 'option');
-      item.textContent = `${f.name} (${f.channels.length})`;
-      item.title = `Añadir a "${f.name}"`;
-      item.addEventListener('click', () => addToFolder(f.id));
+      item.setAttribute('aria-selected', member ? 'true' : 'false');
+      item.textContent = member
+        ? `✓ ${f.name} (${f.channels.length})`
+        : `${f.name} (${f.channels.length})`;
+      item.title = member ? `Quitar de "${f.name}"` : `Añadir a "${f.name}"`;
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (member) removeFromFolder(f.id);
+        else addToFolder(f.id);
+      });
       picker.appendChild(item);
     }
 
     const close = document.createElement('button');
-    close.className = 'ytcf-btn ytcf-btn-ghost ytcf-btn-wide';
+    close.className = 'ytcf-watch-picker-cancel';
     close.type = 'button';
     close.textContent = 'Cancelar';
-    close.addEventListener('click', () => picker.remove());
+    close.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeWatchPicker();
+    });
     picker.appendChild(close);
 
-    box.appendChild(picker);
-    document.addEventListener(
-      'click',
-      (e) => {
-        if (!picker.isConnected) return;
-        if (!picker.contains(e.target) && e.target !== anchorBtn) picker.remove();
-      },
-      { once: true }
-    );
+    document.body.appendChild(picker);
+    repositionWatchPicker();
+
+    document.addEventListener('click', onWatchPickerOutside, true);
+    document.addEventListener('keydown', onWatchPickerKey, true);
+    window.addEventListener('resize', repositionWatchPicker);
+    window.addEventListener('scroll', repositionWatchPicker, true);
   }
 
   async function addToFolder(folderId) {
@@ -568,7 +686,25 @@
     folder.open = true;
     await save();
     render();
+    closeWatchPicker();
     toast(`Añadido a "${folder.name}".`);
+  }
+
+  // Quita el canal del video actual de una carpeta (deshace un alta por error).
+  async function removeFromFolder(folderId) {
+    const channel = detectCurrentChannel() || currentChannel;
+    const folder = folders.find((f) => f.id === folderId);
+    if (!folder || !channel) return;
+    if (!folder.channels.some((c) => c.key === channel.key)) {
+      toast('Ese canal ya no está en la carpeta.');
+      render();
+      return;
+    }
+    folder.channels = folder.channels.filter((c) => c.key !== channel.key);
+    await save();
+    render();
+    closeWatchPicker();
+    toast(`Quitado de "${folder.name}".`);
   }
 
   // ---------- Inyección en el sidebar ----------
@@ -605,7 +741,6 @@
     header.appendChild(add);
     section.appendChild(header);
     section.appendChild(buildBody());
-    section.appendChild(buildAddCurrent());
     return section;
   }
 
@@ -615,18 +750,23 @@
     currentChannel = detectCurrentChannel();
     const existing = document.getElementById(SECTION_ID);
     if (existing && guide.contains(existing)) {
-      render(); // refresca botón de canal actual y cambios de storage
+      render(); // refresca cambios de storage
+      ensureWatchButton();
       return;
     }
     existing?.remove();
     // Inserta al principio para máxima visibilidad.
     guide.prepend(buildSection());
     syncTheme();
+    ensureWatchButton();
   }
 
   function scheduleInject() {
     clearTimeout(injectTimer);
-    injectTimer = setTimeout(ensureInject, 300);
+    injectTimer = setTimeout(() => {
+      ensureInject();
+      ensureWatchButton();
+    }, 300);
   }
 
   // ---------- Arranque ----------
@@ -640,6 +780,7 @@
       if (location.href !== lastUrl) {
         lastUrl = location.href;
         currentChannel = detectCurrentChannel();
+        removeWatchButton();
         window.YTCFView?.close(); // al navegar se vuelve al contenido normal
       }
       const guide = guideContainer();
@@ -649,6 +790,14 @@
       if ((fresh?.key || null) !== (currentChannel?.key || null)) {
         currentChannel = fresh;
         render();
+        ensureWatchButton();
+      } else if (
+        location.pathname === '/watch' &&
+        currentChannel &&
+        !document.getElementById(WATCHBTN_ID)
+      ) {
+        // YouTube re-renderizó la barra de acciones y retiró nuestro botón.
+        ensureWatchButton();
       }
     }).observe(document.documentElement, { childList: true, subtree: true });
 
@@ -662,6 +811,7 @@
       if (area === 'local' && changes[STORE_KEY]) {
         folders = changes[STORE_KEY].newValue || [];
         render();
+        closeWatchPicker();
         // Si la carpeta abierta se eliminó, cierra su muro.
         const openId = window.YTCFView?.getOpenId?.();
         if (openId && !folders.some((f) => f.id === openId)) window.YTCFView.close();
