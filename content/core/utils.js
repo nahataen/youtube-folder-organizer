@@ -143,6 +143,7 @@ window.YTCF = window.YTCF || {};
   ns.safeChannelPath = safeChannelPath;
   ns.cleanTitle = cleanTitle;
   ns.findAvatar = findAvatar;
+  ns.imgUrl = imgUrl; // la usa el respaldo de suscripciones (lee la guía en pantalla)
   ns.runsToText = runsToText;
   ns.simpleText = simpleText;
   ns.pickThumb = pickThumb;

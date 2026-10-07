@@ -5,11 +5,14 @@ Chrome/Edge MV3 extension, no build step. Static files loaded unpacked. No npm, 
 ## Structure
 
 - `manifest.json` — MV3, `permissions: ["storage"]` only. Content scripts run on `https://www.youtube.com/*` at `document_idle`. JS loads in manifest order (classic scripts, no bundler); all share `window.YTCF` namespace.
+- `background.js` — service worker with real SQLite (sql.js from `vendor/sqljs/`, needs `'wasm-unsafe-eval'` in manifest CSP). Owns table `subscriptions` + `meta`; persists DB bytes to `ytSubsDbV1` storage, migrates legacy `ytSubsFeedV1` once. Dumb store: `all` / `replace` / `clear` / `export` over `chrome.runtime.sendMessage` (`scope: 'ytcf-subsdb'`).
+- `vendor/sqljs/` — sql.js engine (js + wasm, pinned 1.8.0). Never edit.
 - `content/core/` — `utils.js` (creates `YTCF` + toast/DOM/text/URL helpers), `store.js` (state `folders`/`currentChannel`, `ytFoldersV1` persistence), `channel.js` (channel detection), `shared.css` (buttons, `.ytcf-chip` gradient chip, avatar, toast, hints).
 - `content/sidebar/` — `sidebar.js` (`MIS CARPETAS` render + inject + SPA observers + init), `forms.js` (create/rename), `sidebar.css`.
 - `content/watch/` — `watch-button.js` (`＋ Carpeta` in watch `ytd-menu-renderer`, folder picker, add/remove membership; exposes `toggleChannelPicker(wrap)` for reuse), `watch.css` (button wrapper positioning + picker; the chip design is `.ytcf-chip` in `shared.css`).
 - `content/samemenu/` — `samemenu.js` (same `＋ Carpeta` button in channel header `ytFlexibleActionsViewModelHost`; single file, reuses `.ytcf-chip` + `toggleChannelPicker`; no own CSS).
-- `content/wall/` — `videos.js` (channel scraping + RSS fallback + cache), `wall.js` (video wall, exposes `window.YTCFView = { openFolder, close, getOpenId }`), `folderView.css`.
+- `content/wall/` — `videos.js` (channel scraping + RSS fallback + cache; exposes `extractInitialData` for subs), `wall.js` (video wall, exposes `window.YTCFView = { openFolder, close, getOpenId }`), `folderView.css`.
+- `content/subs/` — `subs.js` (incremental `ensureSubs(n)`: first batch on open, more batches only when turning popup pages; direct `browse FEchannels` feed with session keys from page HTML or current DOM + SAPISIDHASH-signed calls + continuations up to ~1500 channels + resumable 10 min cache, merged with a request-free fallback reading rendered guide entries; errors `AUTH`/`EMPTY`), `feed-cache.js` (scrapes rendered `/feed/channels` DOM on visit/scroll into SQLite via background (never overwriting with smaller lists and preserving already-saved avatars); floating save button with live count + clear button; exposes fresh/any/save/clear getters), `popup.js` (subscriptions modal, 30/page loaded on demand, per-row add + inline folder creation + SQLite export), `subs.css`.
 - `icons/` — 16/48/128 px.
 
 ## Data
@@ -21,9 +24,10 @@ Chrome/Edge MV3 extension, no build step. Static files loaded unpacked. No npm, 
 ## YouTube SPA quirks
 
 - Guide re-renders often: `content.js` re-injects via `MutationObserver` + debounced `ensureInject()` (prepends to guide). Navigation closes the wall (`YTCFView.close()`).
-- Watch action bar also re-renders: the `＋ Carpeta` button (`#ytcf-watch-add`) targets only `ytd-watch-metadata #actions ytd-menu-renderer > #top-level-buttons-computed`, is prepended left of Like and re-moved there when wiped; hidden off `/watch`. Click opens a fixed-position picker listing ALL folders (`✓` = already contains channel; click toggles add/remove). Its styles (`.ytcf-watch-btn`, `.ytcf-watch-picker*`) are self-contained explicit colors (no `var(--yt-spec-*)`), theme via `html[dark]` only.
+- Watch action bar also re-renders: the `＋ Carpeta` button (`#ytcf-watch-add`) targets only `ytd-watch-metadata #actions ytd-menu-renderer > #top-level-buttons-computed`, is prepended left of Like and re-moved there when wiped; hidden off `/watch`. Click opens a fixed-position picker listing ALL folders (`✓` = already contains channel; click toggles add/remove). Its styles (`.ytcf-chip`, `.ytcf-watch-picker*`) are self-contained explicit colors (no `var(--yt-spec-*)`), theme via `html[dark]` only.
 - Theme: watch `<html dark>` attribute, toggle `.ytcf-dark` (`syncTheme`/`syncWallTheme`). Never rely on `prefers-color-scheme`.
 - Wall hides `#page-manager` children with `display:none` and restores them on close; guard against races with `requestToken`/`openId` in `openFolder`.
+- Single general wall: clicking the `MIS CARPETAS` title opens one wall with all folders' channels deduplicated (synthetic folder id `__general__`, optional `sub` subtitle). Folder headers only expand/collapse, never open walls. The wall shows category filter chips (`Todas` + one per folder); sections carry `data-groups` and are shown/hidden via `wall.dataset.filter`.
 
 ## Video fetching (`folderView.js`)
 

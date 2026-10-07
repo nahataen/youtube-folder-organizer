@@ -42,9 +42,10 @@ window.YTCF = window.YTCF || {};
       el(
         'p',
         'ytcf-wall-sub',
-        folder.channels.length === 0
-          ? 'Sin canales'
-          : `${folder.channels.length} ${folder.channels.length === 1 ? 'canal' : 'canales'}`
+        folder.sub ||
+          (folder.channels.length === 0
+            ? 'Sin canales'
+            : `${folder.channels.length} ${folder.channels.length === 1 ? 'canal' : 'canales'}`)
       )
     );
 
@@ -53,10 +54,71 @@ window.YTCF = window.YTCF || {};
     refresh.title = 'Volver a cargar los videos';
     refresh.addEventListener('click', onRefresh);
 
+    // Popup de suscripciones (módulo subs/): añadirlas a carpetas.
+    const subs = el('button', 'ytcf-chip', 'Suscripciones');
+    subs.type = 'button';
+    subs.title = 'Ver mis suscripciones y añadirlas a carpetas';
+    subs.addEventListener('click', () => {
+      if (ns.openSubsPopup) ns.openSubsPopup();
+      else ns.toast('Módulo de suscripciones no disponible.');
+    });
+
     head.appendChild(back);
     head.appendChild(titles);
+    head.appendChild(subs);
     head.appendChild(refresh);
     wall.appendChild(head);
+
+    // Filtros por categoría (muro general): "Todas" + un chip por carpeta.
+    if (Array.isArray(folder.groups) && folder.groups.length > 0) {
+      wall.appendChild(buildFilters(wall, folder));
+    }
+  }
+
+  function buildFilters(wall, folder) {
+    const bar = el('div', 'ytcf-wall-filters');
+    bar.setAttribute('role', 'group');
+    bar.setAttribute('aria-label', 'Filtrar por categoría');
+    bar.appendChild(filterButton(wall, bar, 'all', `Todas (${folder.channels.length})`));
+    for (const g of folder.groups) {
+      bar.appendChild(filterButton(wall, bar, g.id, `${g.name} (${g.count})`));
+    }
+    return bar;
+  }
+
+  function filterButton(wall, bar, id, label) {
+    const btn = el(
+      'button',
+      'ytcf-chip ytcf-wall-filter' + (id === 'all' ? ' ytcf-wall-filter-active' : '')
+    );
+    btn.type = 'button';
+    btn.textContent = label;
+    btn.title = id === 'all' ? 'Mostrar todas las categorías' : `Mostrar solo ${label}`;
+    btn.setAttribute('aria-pressed', id === 'all' ? 'true' : 'false');
+    btn.addEventListener('click', () => {
+      wall.dataset.filter = id;
+      for (const b of bar.querySelectorAll('.ytcf-wall-filter')) {
+        const active = b === btn;
+        b.classList.toggle('ytcf-wall-filter-active', active);
+        b.setAttribute('aria-pressed', active ? 'true' : 'false');
+      }
+      applyWallFilter(wall);
+    });
+    return btn;
+  }
+
+  // Oculta las secciones de canal que no pertenecen al filtro activo.
+  // Cada sección lleva en `data-groups` los ids de sus carpetas.
+  function applyWallFilter(wall) {
+    const filter = wall.dataset.filter || 'all';
+    let visible = 0;
+    for (const sec of wall.querySelectorAll('.ytcf-chan-sec')) {
+      const show = filter === 'all' || (sec.dataset.groups || '').split(' ').includes(filter);
+      sec.style.display = show ? '' : 'none';
+      if (show) visible++;
+    }
+    const noresult = wall.querySelector('.ytcf-wall-noresult');
+    if (noresult) noresult.style.display = visible === 0 ? '' : 'none';
   }
 
   function buildEmpty(wall) {
@@ -119,6 +181,7 @@ window.YTCF = window.YTCF || {};
 
   function channelSection(channel, videos, failed) {
     const sec = el('section', 'ytcf-chan-sec');
+    if (Array.isArray(channel.groups)) sec.dataset.groups = channel.groups.join(' ');
 
     const head = el('div', 'ytcf-chan-head');
     const link = el('a', 'ytcf-chan-link');
@@ -202,6 +265,7 @@ window.YTCF = window.YTCF || {};
     }
     if (!wall.isConnected) pm.prepend(wall);
     wall.replaceChildren();
+    wall.dataset.filter = 'all';
     syncWallTheme();
     document.addEventListener('keydown', onKey);
     window.addEventListener('resize', onResize);
@@ -216,6 +280,9 @@ window.YTCF = window.YTCF || {};
     }
 
     buildSkeleton(wall);
+    const noresult = el('p', 'ytcf-wall-noresult ytcf-hint', 'Esta categoría aún no tiene canales.');
+    noresult.style.display = 'none';
+    wall.appendChild(noresult);
     window.scrollTo({ top: 0 });
 
     if (opts.bust) ns.bustChannelCache(folder.channels);
@@ -237,6 +304,8 @@ window.YTCF = window.YTCF || {};
           channelSection(batch[j], r.status === 'fulfilled' ? r.value : [], r.status !== 'fulfilled')
         );
       });
+      // Las secciones nuevas respetan el filtro activo (si el usuario ya filtró).
+      applyWallFilter(wall);
     }
   }
 

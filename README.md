@@ -9,6 +9,9 @@ Extensión para **Chrome y Edge** que añade una sección **MIS CARPETAS** al me
 * Crear, renombrar y eliminar carpetas.
 * Añadir o quitar canales con el botón ＋ Carpeta de cualquier video.
 * Ver los videos recientes de cada carpeta.
+* Muro general con filtros por categoría desde el título MIS CARPETAS.
+* Gestionar tus suscripciones desde el muro: guárdalas en tu página de suscripciones y añádelas a carpetas o crea nuevas.
+* Tus suscripciones se guardan en una base SQLite y puedes descargarlas como archivo `.sqlite` desde el popup.
 * Videos agrupados por canal con miniatura, duración, vistas y fecha.
 * Soporte para modo claro y oscuro.
 * Las carpetas vacías muestran un mensaje informativo.

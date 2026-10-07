@@ -10,6 +10,9 @@ window.YTCF = window.YTCF || {};
   'use strict';
 
   const SECTION_ID = 'ytcf-section';
+  // Id sintético del muro general: no existe en el storage, así que el
+  // listener de cambios no debe cerrarlo por "carpeta eliminada".
+  const GENERAL_WALL_ID = '__general__';
   let injectTimer = 0;
 
   // YouTube marca el modo oscuro con <html dark>: forzamos clase propia
@@ -110,11 +113,11 @@ window.YTCF = window.YTCF || {};
     head.appendChild(actions);
 
     const toggle = async () => {
+      // Solo expande/colapsa: el muro general se abre desde el título
+      // "MIS CARPETAS" (openGeneralWall).
       folder.open = !folder.open;
       await ns.saveFolders();
       renderSidebar();
-      // Muestra el muro de videos de la carpeta en el contenido (wall/wall.js).
-      window.YTCFView?.openFolder(folder);
     };
     head.addEventListener('click', toggle);
     head.addEventListener('keydown', (e) => {
@@ -209,6 +212,16 @@ window.YTCF = window.YTCF || {};
     const title = document.createElement('h3');
     title.className = 'ytcf-title';
     title.textContent = 'MIS CARPETAS';
+    title.title = 'Ver el muro general con los videos de todas las carpetas';
+    title.setAttribute('role', 'button');
+    title.setAttribute('tabindex', '0');
+    title.addEventListener('click', openGeneralWall);
+    title.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        openGeneralWall();
+      }
+    });
 
     const add = document.createElement('button');
     add.className = 'ytcf-icon-btn ytcf-add';
@@ -223,6 +236,34 @@ window.YTCF = window.YTCF || {};
     section.appendChild(header);
     section.appendChild(buildBody());
     return section;
+  }
+
+  // Muro general: una carpeta sintética con los canales de TODAS las
+  // carpetas (sin duplicados) + la lista de grupos para los filtros.
+  // Se abre desde el título "MIS CARPETAS". Los canales se copian para
+  // anotar `groups` sin contaminar lo guardado en el storage.
+  function openGeneralWall() {
+    const seen = new Map(); // key -> copia del canal con `groups: [ids]`
+    for (const f of ns.folders) {
+      for (const ch of f.channels) {
+        let entry = seen.get(ch.key);
+        if (!entry) {
+          entry = { ...ch, groups: [] };
+          seen.set(ch.key, entry);
+        }
+        entry.groups.push(f.id);
+      }
+    }
+    const channels = [...seen.values()];
+    window.YTCFView?.openFolder({
+      id: GENERAL_WALL_ID,
+      name: 'Mis carpetas',
+      sub: ns.folders.length === 0
+        ? 'Sin carpetas'
+        : `${ns.folders.length} ${ns.folders.length === 1 ? 'carpeta' : 'carpetas'} · ${channels.length} ${channels.length === 1 ? 'canal' : 'canales'}`,
+      groups: ns.folders.map((f) => ({ id: f.id, name: f.name, count: f.channels.length })),
+      channels
+    });
   }
 
   function ensureSidebar() {
@@ -294,9 +335,10 @@ window.YTCF = window.YTCF || {};
         ns.folders = changes[ns.STORE_KEY].newValue || [];
         renderSidebar();
         ns.closeWatchPicker?.();
-        // Si la carpeta abierta se eliminó, cierra su muro.
+        // Si la carpeta abierta se eliminó, cierra su muro (el general no
+        // vive en el storage y nunca se cierra por esta vía).
         const openId = window.YTCFView?.getOpenId?.();
-        if (openId && !ns.folders.some((f) => f.id === openId)) window.YTCFView.close();
+        if (openId && openId !== GENERAL_WALL_ID && !ns.folders.some((f) => f.id === openId)) window.YTCFView.close();
       }
     });
   }

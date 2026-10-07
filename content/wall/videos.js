@@ -15,8 +15,29 @@ window.YTCF = window.YTCF || {};
 
   // Extrae el objeto ytInitialData del HTML con balanceo de llaves (robusto).
   function extractInitialData(html) {
-    const idx = html.indexOf('ytInitialData');
-    if (idx < 0) return null;
+    const all = extractAllInitialData(html);
+    return all.length > 0 ? all[0] : null;
+  }
+
+  // Todas las ocurrencias válidas: la primera mención de `ytInitialData`
+  // no siempre es el dato (puede ser una referencia previa), así que se
+  // prueban todas y se devuelve cada bloque que parsea bien (máx. 5).
+  function extractAllInitialData(html) {
+    const out = [];
+    let from = 0;
+    let guard = 0;
+    while (out.length < 5 && guard < 12) {
+      guard++;
+      const idx = html.indexOf('ytInitialData', from);
+      if (idx < 0) break;
+      from = idx + 'ytInitialData'.length;
+      const parsed = extractBalancedFrom(html, idx);
+      if (parsed) out.push(parsed);
+    }
+    return out;
+  }
+
+  function extractBalancedFrom(html, idx) {
     const start = html.indexOf('{', idx);
     if (start < 0) return null;
     let depth = 0;
@@ -232,4 +253,7 @@ window.YTCF = window.YTCF || {};
 
   ns.fetchChannelVideos = fetchChannelVideos;
   ns.bustChannelCache = bustChannelCache;
+  // Se reutiliza para leer /feed/channels en el módulo de suscripciones.
+  ns.extractInitialData = extractInitialData;
+  ns.extractAllInitialData = extractAllInitialData;
 })(window.YTCF);

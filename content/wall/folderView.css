@@ -32,6 +32,30 @@
   flex-shrink: 0;
 }
 
+/* Filtros por categoría (muro general): chips con el conteo de canales. */
+.ytcf-wall-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.ytcf-wall-filter-active {
+  background: #0f0f0f;
+  border-color: #0f0f0f;
+  color: #ffffff;
+}
+
+html[dark] .ytcf-wall-filter-active {
+  background: #f1f1f1;
+  border-color: #f1f1f1;
+  color: #0f0f0f;
+}
+
+.ytcf-wall-noresult {
+  padding: 24px 4px;
+}
+
 .ytcf-wall-titles {
   flex: 1 1 240px;
   min-width: 0;
