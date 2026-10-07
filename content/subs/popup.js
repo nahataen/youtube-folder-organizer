@@ -30,6 +30,7 @@ window.YTCF = window.YTCF || {};
   }
 
   function closeSubsPopup() {
+    ns.invalidateLatest(); // descarta rellenos de video en vuelo
     document.removeEventListener('keydown', onKey, true);
     overlay?.remove();
     overlay = null;
@@ -255,6 +256,7 @@ window.YTCF = window.YTCF || {};
       listEl.appendChild(buildRow(sub));
     }
     renderPager();
+    ns.fillLatestVideos(listEl, subs);
   }
 
   function renderPager() {
@@ -354,72 +356,93 @@ window.YTCF = window.YTCF || {};
       badge.title = memberIn.map((f) => f.name).join(', ');
       info.appendChild(badge);
     }
+    // Último video del canal (miniatura+título): lo rellena fillLatestVideos.
+    const latest = document.createElement('div');
+    latest.className = 'ytcf-subs-latest';
+    latest.dataset.subKey = sub.key;
+    const skel = document.createElement('div');
+    skel.className = 'ytcf-subs-latest-skel';
+    skel.setAttribute('aria-hidden', 'true');
+    latest.appendChild(skel);
+    info.appendChild(latest);
     row.appendChild(info);
 
+    // Selector de acción inmediata: elegir mueve el canal a esa carpeta
+    // (lo saca de las demás); "∅ Quitar" lo saca de todas. Sin botón aparte.
     const select = document.createElement('select');
     select.className = 'ytcf-subs-select';
     select.setAttribute('aria-label', `Carpeta para ${sub.name}`);
-    const targets = ns.folders.filter(
-      (f) => !f.channels.some((c) => c.key === sub.key)
-    );
     if (ns.folders.length === 0) {
       const opt = document.createElement('option');
       opt.value = '';
       opt.textContent = 'Sin carpetas (crea una arriba)';
       select.appendChild(opt);
       select.disabled = true;
-    } else if (targets.length === 0) {
-      const opt = document.createElement('option');
-      opt.value = '';
-      opt.textContent = '✓ Ya está en todas';
-      select.appendChild(opt);
-      select.disabled = true;
     } else {
       const ph = document.createElement('option');
       ph.value = '';
-      ph.textContent = 'Añadir a…';
+      ph.textContent = 'Mover a…';
       select.appendChild(ph);
-      for (const f of targets) {
+      for (const f of ns.folders) {
         const opt = document.createElement('option');
         opt.value = f.id;
         opt.textContent = `${f.name} (${f.channels.length})`;
         select.appendChild(opt);
       }
+      const out = document.createElement('option');
+      out.value = '__none__';
+      out.textContent = '∅ Quitar de carpetas';
+      select.appendChild(out);
     }
     row.appendChild(select);
 
-    const add = document.createElement('button');
-    add.className = 'ytcf-chip';
-    add.type = 'button';
-    add.textContent = 'Añadir';
-    add.title = `Añadir "${sub.name}" a la carpeta elegida`;
-    add.disabled = select.disabled;
-    add.addEventListener('click', () => {
-      if (!select.value) {
-        ns.toast('Elige primero una carpeta.');
-        select.focus();
-        return;
-      }
-      addSubToFolder(sub, select.value);
-    });
-    row.appendChild(add);
+    if (!select.disabled) {
+      select.addEventListener('change', () => {
+        const v = select.value;
+        select.value = ''; // vuelve al placeholder; renderList redibuja
+        if (!v) return;
+        moveSubToFolder(sub, v);
+      });
+    }
 
     return row;
   }
 
-  async function addSubToFolder(sub, folderId) {
-    const folder = ns.folders.find((f) => f.id === folderId);
-    if (!folder) return;
-    if (folder.channels.some((c) => c.key === sub.key)) {
-      ns.toast('Ese canal ya está en la carpeta.');
+  // Mover es exclusivo: el canal queda SOLO en la carpeta elegida (o en
+  // ninguna con '__none__'). Si te equivocas, eliges otra y se cambia solo.
+  async function moveSubToFolder(sub, folderId) {
+    if (folderId === '__none__') {
+      const was = ns.folders.filter((f) => f.channels.some((c) => c.key === sub.key));
+      if (was.length === 0) {
+        ns.toast('No está en ninguna carpeta.');
+        renderList();
+        return;
+      }
+      for (const f of was) f.channels = f.channels.filter((c) => c.key !== sub.key);
+      await ns.saveFolders();
+      ns.renderSidebar();
+      ns.toast(
+        was.length === 1 ? `Quitado de "${was[0].name}".` : 'Quitado de las carpetas.'
+      );
       renderList();
       return;
     }
+    const folder = ns.folders.find((f) => f.id === folderId);
+    if (!folder) return;
+    const current = ns.folders.filter((f) => f.channels.some((c) => c.key === sub.key));
+    if (current.length === 1 && current[0].id === folderId) {
+      ns.toast(`Ya está en "${folder.name}".`);
+      renderList();
+      return;
+    }
+    for (const f of current) f.channels = f.channels.filter((c) => c.key !== sub.key);
     folder.channels.push({ key: sub.key, name: sub.name, url: sub.url, avatar: sub.avatar });
     await ns.saveFolders();
     ns.renderSidebar();
-    ns.toast(`Añadido a "${folder.name}".`);
-    renderList(); // actualiza insignias y selectores
+    ns.toast(
+      current.length > 0 ? `Movido a "${folder.name}".` : `Añadido a "${folder.name}".`
+    );
+    renderList(); // actualiza insignias y conteos
   }
 
   // Descarga la lista como archivo SQLite real (tabla subscriptions).

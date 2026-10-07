@@ -30,6 +30,7 @@
         "content/wall/wall.js",
         "content/subs/subs.js",
         "content/subs/feed-cache.js",
+        "content/subs/latest.js",
         "content/subs/popup.js",
         "content/sidebar/forms.js",
         "content/sidebar/sidebar.js",
