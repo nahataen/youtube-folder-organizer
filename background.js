@@ -122,6 +122,35 @@ function writeMeta(k, v) {
   stmt.free();
 }
 
+// Carga un archivo SQLite externo: valida que abra como BD y que traiga la
+// tabla subscriptions con sus columnas, y reemplaza la lista (transacción).
+function importBytes(arr) {
+  if (!Array.isArray(arr) || arr.length === 0) throw new Error('empty');
+  const tmp = new SQLLib.Database(new Uint8Array(arr));
+  try {
+    const has = tmp.exec(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='subscriptions'"
+    );
+    if (!has.length || !has[0].values.length) throw new Error('schema');
+    const cols = tmp.exec('PRAGMA table_info(subscriptions)')[0].values.map((r) => r[1]);
+    for (const c of ['key', 'name', 'url', 'avatar', 'detail']) {
+      if (!cols.includes(c)) throw new Error('schema');
+    }
+    const stmt = tmp.prepare('SELECT key, name, url, avatar, detail FROM subscriptions');
+    const rows = [];
+    while (stmt.step()) rows.push(stmt.getAsObject());
+    stmt.free();
+    writeReplace(rows);
+    return rows.length;
+  } finally {
+    try {
+      tmp.close();
+    } catch {
+      // Descarte del temporal.
+    }
+  }
+}
+
 function schedulePersist() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
@@ -157,6 +186,12 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         case 'export':
           sendResponse({ ok: true, bytes: Array.from(db.export()) });
           break;
+        case 'import': {
+          const count = importBytes(Array.isArray(msg.bytes) ? msg.bytes : []);
+          schedulePersist();
+          sendResponse({ ok: true, count });
+          break;
+        }
         default:
           sendResponse({ ok: false, error: 'op' });
       }

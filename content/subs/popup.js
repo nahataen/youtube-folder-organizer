@@ -90,6 +90,24 @@ window.YTCF = window.YTCF || {};
       formWrap.querySelector('input')?.focus();
     });
     toolbar.appendChild(add);
+    const imp = document.createElement('button');
+    imp.className = 'ytcf-chip';
+    imp.type = 'button';
+    imp.textContent = '⬆ Importar';
+    imp.title = 'Cargar una lista desde un archivo SQLite (reemplaza la guardada)';
+    imp.addEventListener('click', () => fileInput.click());
+    toolbar.appendChild(imp);
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.sqlite,.sqlite3,.db';
+    fileInput.style.display = 'none';
+    fileInput.setAttribute('aria-label', 'Archivo SQLite de suscripciones');
+    fileInput.addEventListener('change', () => {
+      const file = fileInput.files?.[0];
+      fileInput.value = ''; // permite re-elegir el mismo archivo
+      if (file) importSqliteFile(file);
+    });
+    toolbar.appendChild(fileInput);
     const exp = document.createElement('button');
     exp.className = 'ytcf-chip';
     exp.type = 'button';
@@ -425,6 +443,39 @@ window.YTCF = window.YTCF || {};
     } catch {
       ns.toast('No se pudo exportar.');
     }
+  }
+
+  // Carga una lista desde un archivo SQLite (valida el esquema en el worker
+  // y reemplaza la guardada). Avisa cuántos canales entraron.
+  async function importSqliteFile(file) {
+    if (file.size > 20 * 1024 * 1024) {
+      ns.toast('Ese archivo es demasiado grande.');
+      return;
+    }
+    let bytes = [];
+    try {
+      bytes = Array.from(new Uint8Array(await file.arrayBuffer()));
+    } catch {
+      ns.toast('No se pudo leer ese archivo.');
+      return;
+    }
+    if (bytes.length === 0) {
+      ns.toast('Ese archivo está vacío.');
+      return;
+    }
+    let r = null;
+    try {
+      r = await chrome.runtime.sendMessage({ scope: 'ytcf-subsdb', op: 'import', bytes });
+    } catch {
+      r = null;
+    }
+    if (!r || !r.ok) {
+      ns.toast('Archivo inválido: no es una base de suscripciones.');
+      return;
+    }
+    ns.bustSubsCache();
+    await loadSubs(false);
+    ns.toast(`Se importaron ${r.count} ${r.count === 1 ? 'canal' : 'canales'}.`);
   }
 
   ns.openSubsPopup = openSubsPopup;

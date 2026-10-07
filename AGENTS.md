@@ -5,7 +5,7 @@ Chrome/Edge MV3 extension, no build step. Static files loaded unpacked. No npm, 
 ## Structure
 
 - `manifest.json` — MV3, `permissions: ["storage"]` only. Content scripts run on `https://www.youtube.com/*` at `document_idle`. JS loads in manifest order (classic scripts, no bundler); all share `window.YTCF` namespace.
-- `background.js` — service worker with real SQLite (sql.js from `vendor/sqljs/`, needs `'wasm-unsafe-eval'` in manifest CSP). Owns table `subscriptions` + `meta`; persists DB bytes to `ytSubsDbV1` storage, migrates legacy `ytSubsFeedV1` once. Dumb store: `all` / `replace` / `clear` / `export` over `chrome.runtime.sendMessage` (`scope: 'ytcf-subsdb'`).
+- `background.js` — service worker with real SQLite (sql.js from `vendor/sqljs/`, needs `'wasm-unsafe-eval'` in manifest CSP). Owns table `subscriptions` + `meta`; persists DB bytes to `ytSubsDbV1` storage, migrates legacy `ytSubsFeedV1` once. Dumb store: `all` / `replace` / `clear` / `export` / `import` (validates schema before replacing) over `chrome.runtime.sendMessage` (`scope: 'ytcf-subsdb'`).
 - `vendor/sqljs/` — sql.js engine (js + wasm, pinned 1.8.0). Never edit.
 - `content/core/` — `utils.js` (creates `YTCF` + toast/DOM/text/URL helpers), `store.js` (state `folders`/`currentChannel`, `ytFoldersV1` persistence), `channel.js` (channel detection), `shared.css` (buttons, `.ytcf-chip` gradient chip, avatar, toast, hints).
 - `content/sidebar/` — `sidebar.js` (`MIS CARPETAS` render + inject + SPA observers + init), `forms.js` (create/rename), `sidebar.css`.
